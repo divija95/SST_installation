@@ -1,0 +1,53 @@
+FROM sst:base
+
+RUN mkdir /sst
+WORKDIR /sst
+RUN mkdir scratch/
+RUN mkdir scratch/src
+RUN mkdir local/
+RUN mkdir local/packages
+
+# install MPI
+WORKDIR /sst/scratch/src
+RUN wget https://download.open-mpi.org/release/open-mpi/v4.0/openmpi-4.0.5.tar.bz2
+RUN tar -xf openmpi-4.0.5.tar.bz2
+WORKDIR /sst/scratch/src/openmpi-4.0.5
+RUN ./configure --prefix=$MPIHOME
+RUN make -j 8
+RUN make -j 8 install
+
+# install ramulator
+WORKDIR /sst/scratch/src
+RUN git clone https://github.com/CMU-SAFARI/ramulator.git
+WORKDIR /sst/scratch/src/ramulator
+RUN git checkout 7d2e72306c6079768e11a1867eb67b60cee34a1c
+RUN wget https://github.com/sstsimulator/sst-downloads/releases/download/Patch_Files/ramulator_sha_7d2e723_gcc48Patch.patch
+RUN wget https://github.com/sstsimulator/sst-downloads/releases/download/Patch_Files/ramulator_sha_7d2e723_libPatch.patch
+RUN patch -p1 -i ramulator_sha_7d2e723_gcc48Patch.patch
+RUN patch -p1 -i ramulator_sha_7d2e723_libPatch.patch
+ENV RAMULATOR_HOME=/sst/local/packages/ramulator
+RUN make -j 8 CXX=g++ libramulator.so
+RUN ln -s `pwd` $RAMULATOR_HOME
+
+WORKDIR /sst/scratch/src
+COPY ./sst-core /sst/scratch/src/sst-core
+
+WORKDIR /sst/scratch/src/sst-core
+
+RUN ./autogen.sh
+RUN ./configure --prefix=$SST_CORE_HOME
+
+RUN make -j 8 all
+RUN make -j 8 install
+
+RUN sst --version
+
+COPY ./sst-elements /sst/scratch/src/sst-elements
+WORKDIR /sst/scratch/src/sst-elements
+
+RUN ./autogen.sh
+RUN ./configure --prefix=$SST_ELEMENTS_HOME --with-sst-core=$SST_CORE_HOME --with-ramulator=$RAMULATOR_HOME
+RUN make -j 8 all
+RUN make -j 8 install
+
+
